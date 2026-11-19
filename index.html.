@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Neon Bastion - Tower Defense (Expanded Edition)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body {
+    background: #05070f;
+    color: #e0f7ff;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+  }
+  #game-canvas { display: block; width: 100vw; height: 100vh; }
+
+  /* HUD Top Bar */
+  #hud-top {
+    position: fixed; top: 14px; left: 14px; right: 14px;
+    display: flex; justify-content: space-between; align-items: center;
+    pointer-events: none; z-index: 10;
+  }
+  .hud-group {
+    display: flex; gap: 12px; align-items: center;
+    background: rgba(10, 16, 34, 0.85);
+    border: 1px solid rgba(0, 240, 255, 0.35);
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+    padding: 8px 16px; border-radius: 8px;
+    pointer-events: auto;
+  }
+  .stat { font-size: 14px; font-weight: 600; letter-spacing: 0.5px; }
+  .stat span { color: #00f0ff; font-weight: 700; }
+  .stat.gold span { color: #ffd700; }
+  .stat.lives span { color: #ff477e; }
+
+  button {
+    background: rgba(0, 240, 255, 0.15);
+    color: #00f0ff;
+    border: 1px solid #00f0ff;
+    padding: 6px 12px; border-radius: 6px;
+    font-weight: 600; cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover:not(:disabled) {
+    background: #00f0ff; color: #05070f;
+    box-shadow: 0 0 12px #00f0ff;
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.danger { border-color: #ff477e; color: #ff477e; background: rgba(255, 71, 126, 0.12); }
+  button.danger:hover:not(:disabled) { background: #ff477e; color: #fff; box-shadow: 0 0 12px #ff477e; }
+
+  /* Tower Selection & Upgrade Panel */
+  #hud-bottom {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    z-index: 10;
+  }
+  #tower-inspector {
+    display: none;
+    background: rgba(10, 16, 34, 0.92);
+    border: 1px solid #00f0ff;
+    padding: 10px 18px; border-radius: 8px;
+    gap: 14px; align-items: center;
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.25);
+  }
+  #tower-inspector.active { display: flex; }
+  #build-bar {
+    display: flex; gap: 10px;
+    background: rgba(10, 16, 34, 0.88);
+    border: 1px solid rgba(0, 240, 255, 0.35);
+    padding: 10px 14px; border-radius: 10px;
+  }
+  .tower-card {
+    background: rgba(18, 28, 56, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px; padding: 8px 12px;
+    width: 145px; cursor: pointer; text-align: left;
+    transition: all 0.15s ease;
+  }
+  .tower-card:hover { border-color: #00f0ff; transform: translateY(-2px); }
+  .tower-card.selected {
+    border-color: #00f0ff;
+    background: rgba(0, 240, 255, 0.18);
+    box-shadow: 0 0 14px rgba(0, 240, 255, 0.3);
+  }
+  .tower-card .t-name { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  .tower-card .t-cost { color: #ffd700; font-size: 12px; font-weight: 700; }
+  .tower-card .t-desc { color: #9ab8d8; font-size: 11px; margin-top: 4px; line-height: 1.25; }
+
+  #hint-text {
+    font-size: 12px; color: #8ba8c7;
+    background: rgba(5, 7, 15, 0.75);
+    padding: 4px 12px; border-radius: 12px;
+  }
+
+  /* Start / Map & Difficulty Overlay */
+  #overlay {
+    position: fixed; inset: 0;
+    background: radial-gradient(circle at center, rgba(12, 22, 48, 0.92), rgba(4, 6, 14, 0.98));
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    z-index: 50; text-align: center; padding: 20px;
+  }
+  #overlay h1 {
+    font-size: 42px; letter-spacing: 3px; color: #00f0ff;
+    text-shadow: 0 0 20px rgba(0, 240, 255, 0.6);
+    margin-bottom: 8px;
+  }
+  #overlay p { color: #a8c5e5; margin-bottom: 24px; font-size: 15px; }
+  .setup-section { margin-bottom: 22px; }
+  .setup-section h3 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: #7a9bc2; margin-bottom: 10px;
+  }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .choice-btn {
+    padding: 10px 18px; font-size: 14px;
+    background: rgba(16, 26, 52, 0.9);
+    border: 1px solid rgba(0, 240, 255, 0.35);
+    color: #cde8ff;
+  }
+  .choice-btn.active {
+    background: #00f0ff; color: #05070f;
+    border-color: #00f0ff; box-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+  }
+  #start-btn {
+    padding: 14px 36px; font-size: 16px; letter-spacing: 1.5px;
+    background: #00f0ff; color: #05070f; border: none;
+    box-shadow: 0 0 22px rgba(0, 240, 255, 0.5);
+    margin-top: 8px;
+  }
+  #boss-banner {
+    position: fixed; top: 68px; left: 50%; transform: translateX(-50%);
+    background: rgba(255, 25, 85, 0.2); border: 1px solid #ff1955;
+    color: #ff6b93; padding: 6px 20px; border-radius: 6px;
+    font-weight: 700; letter-spacing: 1.5px; display: none; z-index: 15;
+    text-shadow: 0 0 8px #ff1955;
+  }
+</style>
+</head>
+<body>
+
+<div id="hud-top">
+  <div class="hud-group">
+    <div class="stat gold">Gold: <span id="ui-gold">180</span></div>
+    <div class="stat lives">Lives: <span id="ui-lives">20</span></div>
+    <div class="stat">Wave: <span id="ui-wave">1 / 50</span></div>
+    <div class="stat">Map: <span id="ui-map">Neon Switchback</span></div>
+    <div class="stat">Difficulty: <span id="ui-diff">Normal</span></div>
+  </div>
+  <div class="hud-group">
+    <button id="btn-speed">Speed: 1x</button>
+    <button id="btn-next">Next Wave</button>
+  </div>
+</div>
+
+<div id="boss-banner">MEGA-BOSS APPROACHING!</div>
+
+<div id="hud-bottom">
+  <div id="tower-inspector">
+    <div>
+      <strong id="insp-title" style="color:#00f0ff;">Tower Lv. 1</strong>
+      <div id="insp-stats" style="font-size:12px; color:#9ab8d8;">DMG: 20 | RNG: 4.5</div>
+    </div>
+    <button id="btn-upgrade">Upgrade ($65)</button>
+    <button id="btn-sell" class="danger">Sell ($30)</button>
+    <button id="btn-deselect">Close</button>
+  </div>
+
+  <div id="build-bar">
+    <div class="tower-card selected" data-type="pulse">
+      <div class="t-name" style="color:#00f0ff;">Pulse Turret</div>
+      <div class="t-cost">$60</div>
+      <div class="t-desc">Twin-barrel rapid bolts. Reliable single-target DPS.</div>
+    </div>
+    <div class="tower-card" data-type="prism">
+      <div class="t-name" style="color:#ff2a85;">Prism Beam</div>
+      <div class="t-cost">$110</div>
+      <div class="t-desc">Continuous laser that ramps damage the longer it locks on.</div>
+    </div>
+    <div class="tower-card" data-type="tesla">
+      <div class="t-name" style="color:#b84dff;">Tesla Coil</div>
+      <div class="t-cost">$135</div>
+      <div class="t-desc">Arc lightning chaining across up to 4 nearby enemies.</div>
+    </div>
+    <div class="tower-card" data-type="mortar">
+      <div class="t-name" style="color:#ff9e00;">Plasma Mortar</div>
+      <div class="t-cost">$150</div>
+      <div class="t-desc">Lobbed explosive shells dealing heavy AoE splash damage.</div>
+    </div>
+    <div class="tower-card" data-type="cryo">
+      <div class="t-name" style="color:#5ce1e6;">Cryo Obelisk</div>
+      <div class="t-cost">$95</div>
+      <div class="t-desc">Frost shockwave ring that slows all enemies in range.</div>
+    </div>
+  </div>
+  <div id="hint-text">Left-click grid to build | Click placed tower to upgrade/sell | Right-drag to orbit camera</div>
+</div>
+
+<div id="overlay">
+  <h1>3D NEON BASTION</h1>
+  <p>Survive 50 Waves, Master Unique Tower Arsenal &amp; Defeat 5 Mega-Bosses</p>
+
+  <div class="setup-section">
+    <h3>1. Select Battlefield Map</h3>
+    <div class="btn-row" id="map-choices">
+      <button class="choice-btn active" data-map="0">Neon Switchback (Classic)</button>
+      <button class="choice-btn" data-map="1">Cyber Spiral (Long Core)</button>
+      <button class="choice-btn" data-map="2">Twin Bastion Gauntlet (Tight)</button>
+      <button class="choice-btn" data-map="3">Void Crossroad (High Risk)</button>
+    </div>
+  </div>
+
+  <div class="setup-section">
+    <h3>2. Select Economy &amp; Threat Difficulty</h3>
+    <div class="btn-row" id="diff-choices">
+      <button class="choice-btn" data-diff="Easy">Easy</button>
+      <button class="choice-btn active" data-diff="Normal">Normal</button>
+      <button class="choice-btn" data-diff="Hard">Hard</button>
+      <button class="choice-btn" data-diff="Nightmare">Nightmare</button>
+    </div>
+  </div>
+
+  <button id="start-btn">DEPLOY BASTION</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ==========================================
+// 1. MAPS & DIFFICULTY CONFIGURATIONS
+// ==========================================
+const GRID_SIZE = 16;
+const TILE_SIZE = 2;
+
+const MAPS = [
+  {
+    name: "Neon Switchback",
+    themeColor: 0x00f0ff,
+    waypoints: [
+      [-7, -6], [-7, -2], [5, -2], [5, 2], [-5, 2], [-5, 6], [7, 6]
+    ]
+  },
+  {
+    name: "Cyber Spiral",
+    themeColor: 0xb84dff,
+    waypoints: [
+      [-7, -7], [7, -7], [7, 7], [-5, 7], [-5, -4], [4, -4], [4, 4], [-1, 4], [-1, 0]
+    ]
+  },
+  {
+    name: "Twin Bastion Gauntlet",
+    themeColor: 0xff2a85,
+    waypoints: [
+      [-7, 0], [-3, 0], [-3, -6], [1, -6], [1, 6], [5, 6], [5, 0], [7, 0]
+    ]
+  },
+  {
+    name: "Void Crossroad",
+    themeColor: 0xff9e00,
+    waypoints: [
+      [0, -7], [0, 5], [-6, 5], [-6, -3], [6, -3], [6, 7]
+    ]
+  }
+];
+
+// Scarcer economy tuning: tighter starting gold, steeper kill-reward decay per wave, lower sell refund (50%)
+const DIFFICULTIES = {
+  Easy:      { startGold: 220, hpMult: 0.85, goldMult: 0.85, waveBonusBase: 28 },
+  Normal:    { startGold: 180, hpMult: 1.00, goldMult: 0.70, waveBonusBase: 22 },
+  Hard:      { startGold: 155, hpMult: 1.25, goldMult: 0.58, waveBonusBase: 18 },
+  Nightmare: { startGold: 135, hpMult: 1.55, goldMult: 0.48, waveBonusBase: 15 }
+};
+
+const TOWER_DEFS = {
+  pulse: {
+    name: "Pulse Turret", cost: 60, range: 4.6, damage: 18, fireRate: 0.55, color: 0x00f0ff,
+    upgradeCostBase: 65, upgradeCostMult: 1.55
+  },
+  prism: {
+    name: "Prism Beam", cost: 110, range: 5.2, damage: 34, fireRate: 0.1, color: 0xff2a85,
+    upgradeCostBase: 115, upgradeCostMult: 1.65
+  },
+  tesla: {
+    name: "Tesla Coil", cost: 135, range: 4.4, damage: 26, fireRate: 1.15, color: 0xb84dff,
+    upgradeCostBase: 135, upgradeCostMult: 1.65
+  },
+  mortar: {
+    name: "Plasma Mortar", cost: 150, range: 6.5, damage: 55, fireRate: 1.9, color: 0xff9e00,
+    upgradeCostBase: 150, upgradeCostMult: 1.7
+  },
+  cryo: {
+    name: "Cryo Obelisk", cost: 95, range: 4.0, damage: 8, fireRate: 1.2, color: 0x5ce1e6,
+    upgradeCostBase: 95, upgradeCostMult: 1.6
+  }
+};
+
+// ==========================================
+// 2. GAME STATE
+// ==========================================
+let state = {
+  gold: 180,
+  lives: 20,
+  wave: 0,
+  maxWaves: 50,
+  mapIndex: 0,
+  difficulty: 'Normal',
+  speed: 1,
+  selectedBuildType: 'pulse',
+  selectedTower: null,
+  waveActive: false,
+  spawnQueue: [],
+  spawnTimer: 0,
+  gameStarted: false
+};
+
+// ==========================================
+// 3. THREE.JS SCENE SETUP
+// ==========================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070f);
+scene.fog = new THREE.FogExp2(0x05070f, 0.022);
+
+const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 150);
+camera.position.set(0, 24, 22);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI / 2.2;
+controls.minDistance = 10;
+controls.maxDistance = 42;
+controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+
+// Lighting
+const ambientLight = new THREE.AmbientLight(0x334466, 1.4);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.8);
+dirLight.position.set(14, 28, 16);
+scene.add(dirLight);
+
+const pointLight = new THREE.PointLight(0x00f0ff, 2.5, 45);
+pointLight.position.set(0, 10, 0);
+scene.add(pointLight);
+
+// Containers
+const mapGroup = new THREE.Group();
+const towerGroup = new THREE.Group();
+const enemyGroup = new THREE.Group();
+const fxGroup = new THREE.Group();
+scene.add(mapGroup, towerGroup, enemyGroup, fxGroup);
+
+let occupiedTiles = new Set();
+let pathPoints = [];
+let towers = [];
+let enemies = [];
+let projectiles = [];
+let activeBeams = [];
+
+// Hover Cursor Tile
+const cursorGeo = new THREE.BoxGeometry(TILE_SIZE * 0.94, 0.25, TILE_SIZE * 0.94);
+const cursorMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.35 });
+const hoverCursor = new THREE.Mesh(cursorGeo, cursorMat);
+hoverCursor.visible = false;
+scene.add(hoverCursor);
+
+const rangeRingGeo = new THREE.RingGeometry(0.95, 1.0, 48);
+rangeRingGeo.rotateX(-Math.PI / 2);
+const rangeRingMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, side: THREE.DoubleSide, transparent: true, opacity: 0.45 });
+const rangeRing = new THREE.Mesh(rangeRingGeo, rangeRingMat);
+rangeRing.visible = false;
+scene.add(rangeRing);
+
+// ==========================================
+// 4. CUSTOM PROCEDURAL 3D TOWER MODELS
+// ==========================================
+function createTowerMesh(type) {
+  const root = new THREE.Group();
+  const def = TOWER_DEFS[type];
+
+  // Shared armored octagonal pedestal
+  const baseMat = new THREE.MeshStandardMaterial({ color: 0x131b2e, metalness: 0.7, roughness: 0.25 });
+  const trimMat = new THREE.MeshStandardMaterial({
+    color: def.color, emissive: def.color, emissiveIntensity: 0.75, metalness: 0.4, roughness: 0.2
+  });
+
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.9, 0.35, 8), baseMat);
+  base.position.y = 0.175;
+  root.add(base);
+
+  const neonTrim = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.04, 8, 24), trimMat);
+  neonTrim.rotation.x = Math.PI / 2;
+  neonTrim.position.y = 0.34;
+  root.add(neonTrim);
+
+  const turretHead = new THREE.Group();
+  turretHead.position.y = 0.55;
+  root.add(turretHead);
+
+  let animPart = null;
+
+  if (type === 'pulse') {
+    // Twin-barrel rotary autocannon
+    const housing = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.8), baseMat);
+    turretHead.add(housing);
+
+    const barrelGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.95, 10);
+    barrelGeo.rotateX(Math.PI / 2);
+
+    const leftBarrel = new THREE.Mesh(barrelGeo, trimMat);
+    leftBarrel.position.set(-0.2, 0.04, 0.55);
+    const rightBarrel = new THREE.Mesh(barrelGeo, trimMat);
+    rightBarrel.position.set(0.2, 0.04, 0.55);
+
+    turretHead.add(leftBarrel, rightBarrel);
+    animPart = { leftBarrel, rightBarrel };
+  }
+  else if (type === 'prism') {
+    // Floating crystalline focus lens with gimbal ring
+    const pylon = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.45, 0.65, 6), baseMat);
+    pylon.position.y = 0.15;
+    turretHead.add(pylon);
+
+    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), trimMat);
+    crystal.position.y = 0.85;
+    turretHead.add(crystal);
+
+    const gimbal = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.035, 8, 24), baseMat);
+    gimbal.position.y = 0.85;
+    turretHead.add(gimbal);
+
+    animPart = { crystal, gimbal };
+  }
+  else if (type === 'tesla') {
+    // Stacked copper/neon induction rings + plasma orb
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.28, 1.15, 12), baseMat);
+    mast.position.y = 0.45;
+    turretHead.add(mast);
+
+    for (let i = 0; i < 3; i++) {
+      const coil = new THREE.Mesh(new THREE.TorusGeometry(0.46 - i * 0.08, 0.045, 8, 20), trimMat);
+      coil.rotation.x = Math.PI / 2;
+      coil.position.y = 0.35 + i * 0.28;
+      turretHead.add(coil);
+    }
+
+    const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.26, 1), trimMat);
+    orb.position.y = 1.25;
+    turretHead.add(orb);
+    animPart = { orb };
+  }
+  else if (type === 'mortar') {
+    // Heavy angled siege cannon with recoil cradle
+    const cradle = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.5, 0.75), baseMat);
+    cradle.position.y = 0.15;
+    turretHead.add(cradle);
+
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.38, 1.15, 14), baseMat);
+    tube.position.set(0, 0.55, 0.15);
+    tube.rotation.x = Math.PI / 4;
+    turretHead.add(tube);
+
+    const muzzleRing = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.05, 8, 18), trimMat);
+    muzzleRing.position.set(0, 0.92, 0.52);
+    muzzleRing.rotation.x = Math.PI / 4;
+    turretHead.add(muzzleRing);
+
+    animPart = { tube, muzzleRing };
+  }
+  else if (type === 'cryo') {
+    // Tall frost spire with orbiting cryo shards
+    const spire = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.45, 6), trimMat);
+    spire.position.y = 0.65;
+    turretHead.add(spire);
+
+    const shardGroup = new THREE.Group();
+    shardGroup.position.y = 0.75;
+    for (let i = 0; i < 4; i++) {
+      const shard = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0), baseMat);
+      const angle = (i / 4) * Math.PI * 2;
+      shard.position.set(Math.cos(angle) * 0.65, 0, Math.sin(angle) * 0.65);
+      shardGroup.add(shard);
+    }
+    turretHead.add(shardGroup);
+    animPart = { spire, shardGroup };
+  }
+
+  return { root, turretHead, animPart };
+}
+
+// ==========================================
+// 5. MAP BUILDER
+// ==========================================
+function buildMap(index) {
+  while (mapGroup.children.length) mapGroup.remove(mapGroup.children[0]);
+  occupiedTiles.clear();
+  pathPoints = [];
+
+  const mapData = MAPS[index];
+  pointLight.color.setHex(mapData.themeColor);
+
+  // Base platform grid
+  const boardGeo = new THREE.BoxGeometry(GRID_SIZE * TILE_SIZE, 0.4, GRID_SIZE * TILE_SIZE);
+  const boardMat = new THREE.MeshStandardMaterial({ color: 0x090e1d, metalness: 0.5, roughness: 0.7 });
+  const board = new THREE.Mesh(boardGeo, boardMat);
+  board.position.y = -0.2;
+  mapGroup.add(board);
+
+  const gridHelper = new THREE.GridHelper(GRID_SIZE * TILE_SIZE, GRID_SIZE, mapData.themeColor, 0x162240);
+  gridHelper.position.y = 0.01;
+  mapGroup.add(gridHelper);
+
+  // Carve path tiles from waypoints
+  const wp = mapData.waypoints;
+  const pathTileMat = new THREE.MeshStandardMaterial({
+    color: 0x141e38, emissive: mapData.themeColor, emissiveIntensity: 0.18, roughness: 0.4
+  });
+
+  for (let i = 0; i < wp.length - 1; i++) {
+    let [x1, z1] = wp[i];
+    let [x2, z2] = wp[i + 1];
+    const steps = Math.max(Math.abs(x2 - x1), Math.abs(z2 - z1));
+    for (let s = 0; s <= steps; s++) {
+      const gx = Math.round(x1 + ((x2 - x1) * s) / steps);
+      const gz = Math.round(z1 + ((z2 - z1) * s) / steps);
+      const key = `${gx},${gz}`;
+      if (!occupiedTiles.has(key)) {
+        occupiedTiles.add(key);
+        const tile = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.96, 0.08, TILE_SIZE * 0.96), pathTileMat);
+        tile.position.set(gx * TILE_SIZE, 0.04, gz * TILE_SIZE);
+        mapGroup.add(tile);
+      }
+    }
+  }
+
+  pathPoints = wp.map(([gx, gz]) => new THREE.Vector3(gx * TILE_SIZE, 0.5, gz * TILE_SIZE));
+
+  // Spawn & Core portals
+  const spawnPortal = new THREE.Mesh(
+    new THREE.TorusGeometry(0.85, 0.12, 10, 24),
+    new THREE.MeshBasicMaterial({ color: 0xff2a85 })
+  );
+  spawnPortal.position.copy(pathPoints[0]).setY(0.9);
+  mapGroup.add(spawnPortal);
+
+  const coreCrystal = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.9, 0),
+    new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 0.9 })
+  );
+  coreCrystal.position.copy(pathPoints[pathPoints.length - 1]).setY(1.0);
+  mapGroup.add(coreCrystal);
+}
+
+// ==========================================
+// 6. TOWER PLACEMENT, UPGRADES & SELLING
+// ==========================================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+function getGridCoords(clientX, clientY) {
+  mouse.x = (clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hit = new THREE.Vector3();
+  if (!raycaster.ray.intersectPlane(groundPlane, hit)) return null;
+
+  const gx = Math.round(hit.x / TILE_SIZE);
+  const gz = Math.round(hit.z / TILE_SIZE);
+  const half = GRID_SIZE / 2 - 1;
+  if (gx < -half || gx > half || gz < -half || gz > half) return null;
+  return { gx, gz };
+}
+
+window.addEventListener('pointermove', (e) => {
+  if (!state.gameStarted) return;
+  const coords = getGridCoords(e.clientX, e.clientY);
+  if (!coords) {
+    hoverCursor.visible = false;
+    if (!state.selectedTower) rangeRing.visible = false;
+    return;
+  }
+  const key = `${coords.gx},${coords.gz}`;
+  const blocked = occupiedTiles.has(key);
+  hoverCursor.visible = true;
+  hoverCursor.position.set(coords.gx * TILE_SIZE, 0.12, coords.gz * TILE_SIZE);
+  hoverCursor.material.color.setHex(blocked ? 0xff2a85 : 0x00f0ff);
+
+  if (!state.selectedTower && !blocked) {
+    const def = TOWER_DEFS[state.selectedBuildType];
+    rangeRing.visible = true;
+    rangeRing.position.set(coords.gx * TILE_SIZE, 0.08, coords.gz * TILE_SIZE);
+    rangeRing.scale.set(def.range, def.range, 1);
+  }
+});
+
+window.addEventListener('pointerdown', (e) => {
+  if (!state.gameStarted || e.button !== 0) return;
+  if (e.target.closest('#hud-top') || e.target.closest('#hud-bottom')) return;
+
+  const coords = getGridCoords(e.clientX, e.clientY);
+  if (!coords) return;
+  const key = `${coords.gx},${coords.gz}`;
+
+  // Check if clicking an existing tower
+  const existing = towers.find(t => t.gx === coords.gx && t.gz === coords.gz);
+  if (existing) {
+    selectTower(existing);
+    return;
+  }
+
+  deselectTower();
+  if (occupiedTiles.has(key)) return;
+
+  const def = TOWER_DEFS[state.selectedBuildType];
+  if (state.gold < def.cost) return;
+
+  state.gold -= def.cost;
+  occupiedTiles.add(key);
+
+  const model = createTowerMesh(state.selectedBuildType);
+  model.root.position.set(coords.gx * TILE_SIZE, 0, coords.gz * TILE_SIZE);
+  towerGroup.add(model.root);
+
+  const towerObj = {
+    type: state.selectedBuildType,
+    gx: coords.gx,
+    gz: coords.gz,
+    pos: new THREE.Vector3(coords.gx * TILE_SIZE, 0.8, coords.gz * TILE_SIZE),
+    level: 1,
+    totalInvested: def.cost,
+    damage: def.damage,
+    range: def.range,
+    fireRate: def.fireRate,
+    cooldown: 0,
+    lockTarget: null,
+    lockTime: 0,
+    model
+  };
+  towers.push(towerObj);
+  updateHUD();
+});
+
+function selectTower(tower) {
+  state.selectedTower = tower;
+  const inspector = document.getElementById('tower-inspector');
+  inspector.classList.add('active');
+
+  const def = TOWER_DEFS[tower.type];
+  const upgCost = Math.round(def.upgradeCostBase * Math.pow(def.upgradeCostMult, tower.level - 1));
+  const sellVal = Math.round(tower.totalInvested * 0.5); // Scarcer 50% refund
+
+  document.getElementById('insp-title').textContent = `${def.name} Lv. ${tower.level}`;
+  document.getElementById('insp-stats').textContent = `DMG: ${Math.round(tower.damage)} | RNG: ${tower.range.toFixed(1)}`;
+  document.getElementById('btn-upgrade').textContent = `Upgrade ($${upgCost})`;
+  document.getElementById('btn-upgrade').disabled = state.gold < upgCost || tower.level >= 8;
+  document.getElementById('btn-sell').textContent = `Sell ($${sellVal})`;
+
+  rangeRing.visible = true;
+  rangeRing.position.set(tower.pos.x, 0.08, tower.pos.z);
+  rangeRing.scale.set(tower.range, tower.range, 1);
+}
+
+function deselectTower() {
+  state.selectedTower = null;
+  document.getElementById('tower-inspector').classList.remove('active');
+  rangeRing.visible = false;
+}
+
+document.getElementById('btn-upgrade').addEventListener('click', () => {
+  const t = state.selectedTower;
+  if (!t) return;
+  const def = TOWER_DEFS[t.type];
+  const upgCost = Math.round(def.upgradeCostBase * Math.pow(def.upgradeCostMult, t.level - 1));
+  if (state.gold < upgCost) return;
+
+  state.gold -= upgCost;
+  t.totalInvested += upgCost;
+  t.level += 1;
+  t.damage *= 1.32;
+  t.range += 0.22;
+  t.fireRate *= 0.94;
+  t.model.root.scale.setScalar(1 + (t.level - 1) * 0.04);
+
+  selectTower(t);
+  updateHUD();
+});
+
+document.getElementById('btn-sell').addEventListener('click', () => {
+  const t = state.selectedTower;
+  if (!t) return;
+  state.gold += Math.round(t.totalInvested * 0.5);
+  occupiedTiles.delete(`${t.gx},${t.gz}`);
+  towerGroup.remove(t.model.root);
+  towers = towers.filter(item => item !== t);
+  deselectTower();
+  updateHUD();
+});
+
+document.getElementById('btn-deselect').addEventListener('click', deselectTower);
+
+// ==========================================
+// 7. WAVES, ENEMIES & SCARCER GOLD REWARDS
+// ==========================================
+function startNextWave() {
+  if (state.waveActive || state.wave >= state.maxWaves) return;
+  state.wave += 1;
+  state.waveActive = true;
+  document.getElementById('btn-next').disabled = true;
+
+  const isBossWave = state.wave % 10 === 0;
+  document.getElementById('boss-banner').style.display = isBossWave ? 'block' : 'none';
+
+  const diff = DIFFICULTIES[state.difficulty];
+  const count = isBossWave ? 1 + Math.floor(state.wave / 10) : 7 + Math.floor(state.wave * 1.15);
+  const baseHp = (45 + Math.pow(state.wave, 1.62) * 14) * diff.hpMult;
+
+  // Scarcer kill rewards: diminishes as waves progress so placement/upgrades require careful economy
+  const rawReward = Math.max(2, (5 + Math.floor(state.wave * 0.18)) * diff.goldMult * (1 / (1 + state.wave * 0.025)));
+
+  state.spawnQueue = [];
+  for (let i = 0; i < count; i++) {
+    const boss = isBossWave && i === count - 1;
+    state.spawnQueue.push({
+      hp: boss ? baseHp * 11 : baseHp,
+      maxHp: boss ? baseHp * 11 : baseHp,
+      speed: boss ? 1.45 : 2.3 + Math.min(2.2, state.wave * 0.03),
+      reward: boss ? Math.round(rawReward * 7) : Math.max(1, Math.round(rawReward)),
+      isBoss: boss
+    });
+  }
+  state.spawnTimer = 0;
+  updateHUD();
+}
+
+function spawnEnemy(spec) {
+  const geo = spec.isBoss
+    ? new THREE.DodecahedronGeometry(0.85, 0)
+    : new THREE.BoxGeometry(0.75, 0.75, 0.75);
+  const mat = new THREE.MeshStandardMaterial({
+    color: spec.isBoss ? 0xff1955 : 0xff477e,
+    emissive: spec.isBoss ? 0xff1955 : 0x881133,
+    emissiveIntensity: 0.7
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(pathPoints[0]);
+  enemyGroup.add(mesh);
+
+  enemies.push({
+    ...spec,
+    mesh,
+    wpIndex: 1,
+    slowTimer: 0,
+    slowFactor: 1
+  });
+}
+
+// ==========================================
+// 8. DISTINCT TOWER ATTACK BEHAVIORS
+// ==========================================
+function spawnFXLine(p1, p2, color, life = 0.12) {
+  const geo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+  const mat = new THREE.LineBasicMaterial({ color });
+  const line = new THREE.Line(geo, mat);
+  fxGroup.add(line);
+  activeBeams.push({ mesh: line, life });
+}
+
+function spawnShockwave(pos, maxRadius, color) {
+  const geo = new THREE.RingGeometry(0.1, 0.35, 32);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+  const ring = new THREE.Mesh(geo, mat);
+  ring.position.set(pos.x, 0.15, pos.z);
+  fxGroup.add(ring);
+  activeBeams.push({ mesh: ring, life: 0.28, expandTo: maxRadius });
+}
+
+function damageEnemy(enemy, amount) {
+  enemy.hp -= amount;
+  if (enemy.hp <= 0 && !enemy.dead) {
+    enemy.dead = true;
+    state.gold += enemy.reward;
+    enemyGroup.remove(enemy.mesh);
+    updateHUD();
+  }
+}
+
+function updateTowers(dt) {
+  towers.forEach(t => {
+    t.cooldown -= dt;
+
+    // Idle / Model animations
+    if (t.type === 'prism' && t.model.animPart) {
+      t.model.animPart.crystal.rotation.y += dt * 2.2;
+      t.model.animPart.gimbal.rotation.x += dt * 1.5;
+    } else if (t.type === 'cryo' && t.model.animPart) {
+      t.model.animPart.shardGroup.rotation.y -= dt * 2.5;
+    } else if (t.type === 'tesla' && t.model.animPart) {
+      t.model.animPart.orb.rotation.y += dt * 3;
+    }
+
+    // Find targets in range
+    const inRange = enemies.filter(e => !e.dead && e.mesh.position.distanceTo(t.pos) <= t.range);
+    if (inRange.length === 0) {
+      t.lockTarget = null;
+      t.lockTime = 0;
+      return;
+    }
+
+    const primary = inRange[0];
+    t.model.turretHead.lookAt(primary.mesh.position.x, t.model.turretHead.position.y, primary.mesh.position.z);
+
+    // 1. PRISM BEAM: Continuous escalating beam
+    if (t.type === 'prism') {
+      if (t.lockTarget !== primary) {
+        t.lockTarget = primary;
+        t.lockTime = 0;
+      }
+      t.lockTime += dt;
+      const rampMultiplier = Math.min(3.2, 1 + t.lockTime * 0.65);
+      damageEnemy(primary, t.damage * rampMultiplier * dt);
+      spawnFXLine(t.pos.clone().setY(1.35), primary.mesh.position, 0xff2a85, 0.04);
+      return;
+    }
+
+    if (t.cooldown > 0) return;
+    t.cooldown = t.fireRate;
+
+    // 2. PULSE TURRET: Fast kinetic bolts
+    if (t.type === 'pulse') {
+      const projMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.14, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x00f0ff })
+      );
+      projMesh.position.copy(t.pos).setY(0.65);
+      fxGroup.add(projMesh);
+      projectiles.push({
+        type: 'bolt', mesh: projMesh, target: primary, speed: 18, damage: t.damage
+      });
+    }
+
+    // 3. TESLA COIL: Instant chain lightning up to 4 targets
+    else if (t.type === 'tesla') {
+      let prevPos = t.pos.clone().setY(1.7);
+      let hitSet = new Set();
+      let current = primary;
+      for (let jump = 0; jump < 4 && current; jump++) {
+        hitSet.add(current);
+        const jumpDmg = t.damage * Math.pow(0.8, jump);
+        damageEnemy(current, jumpDmg);
+        spawnFXLine(prevPos, current.mesh.position, 0xb84dff, 0.16);
+        prevPos = current.mesh.position.clone();
+        current = enemies.find(e => !e.dead && !hitSet.has(e) && e.mesh.position.distanceTo(prevPos) <= 3.2);
+      }
+    }
+
+    // 4. PLASMA MORTAR: High-arcing AoE explosive shell
+    else if (t.type === 'mortar') {
+      const shellMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.24, 10, 10),
+        new THREE.MeshBasicMaterial({ color: 0xff9e00 })
+      );
+      shellMesh.position.copy(t.pos).setY(1.4);
+      fxGroup.add(shellMesh);
+      projectiles.push({
+        type: 'mortar',
+        mesh: shellMesh,
+        startPos: shellMesh.position.clone(),
+        targetPos: primary.mesh.position.clone(),
+        progress: 0,
+        duration: 0.65,
+        damage: t.damage,
+        splashRadius: 2.3
+      });
+    }
+
+    // 5. CRYO OBELISK: Frost nova pulse slowing all enemies in range
+    else if (t.type === 'cryo') {
+      spawnShockwave(t.pos, t.range, 0x5ce1e6);
+      inRange.forEach(e => {
+        damageEnemy(e, t.damage);
+        e.slowTimer = 2.0;
+        e.slowFactor = 0.52;
+      });
+    }
+  });
+}
+
+function updateProjectiles(dt) {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+
+    if (p.type === 'bolt') {
+      if (!p.target || p.target.dead) {
+        fxGroup.remove(p.mesh);
+        projectiles.splice(i, 1);
+        continue;
+      }
+      const dir = p.target.mesh.position.clone().sub(p.mesh.position);
+      const dist = dir.length();
+      if (dist < 0.35) {
+        damageEnemy(p.target, p.damage);
+        fxGroup.remove(p.mesh);
+        projectiles.splice(i, 1);
+      } else {
+        p.mesh.position.add(dir.normalize().multiplyScalar(p.speed * dt));
+      }
+    }
+    else if (p.type === 'mortar') {
+      p.progress += dt / p.duration;
+      if (p.progress >= 1) {
+        spawnShockwave(p.targetPos, p.splashRadius, 0xff9e00);
+        enemies.forEach(e => {
+          if (!e.dead && e.mesh.position.distanceTo(p.targetPos) <= p.splashRadius) {
+            damageEnemy(e, p.damage);
+          }
+        });
+        fxGroup.remove(p.mesh);
+        projectiles.splice(i, 1);
+      } else {
+        p.mesh.position.lerpVectors(p.startPos, p.targetPos, p.progress);
+        p.mesh.position.y += Math.sin(p.progress * Math.PI) * 3.8;
+      }
+    }
+  }
+}
+
+function updateEnemies(dt) {
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    if (e.dead) {
+      enemies.splice(i, 1);
+      continue;
+    }
+
+    if (e.slowTimer > 0) {
+      e.slowTimer -= dt;
+      if (e.slowTimer <= 0) e.slowFactor = 1;
+    }
+
+    const targetWp = pathPoints[e.wpIndex];
+    const dir = targetWp.clone().sub(e.mesh.position);
+    const dist = dir.length();
+    const moveStep = e.speed * e.slowFactor * dt;
+
+    if (dist <= moveStep) {
+      e.mesh.position.copy(targetWp);
+      e.wpIndex += 1;
+      if (e.wpIndex >= pathPoints.length) {
+        state.lives -= e.isBoss ? 5 : 1;
+        enemyGroup.remove(e.mesh);
+        enemies.splice(i, 1);
+        updateHUD();
+        if (state.lives <= 0) {
+          alert(`Bastion Breached on Wave ${state.wave}! Reloading...`);
+          location.reload();
+        }
+      }
+    } else {
+      e.mesh.position.add(dir.normalize().multiplyScalar(moveStep));
+      e.mesh.rotation.y += dt * 2.5;
+    }
+  }
+
+  // Wave completion check
+  if (state.waveActive && state.spawnQueue.length === 0 && enemies.length === 0) {
+    state.waveActive = false;
+    document.getElementById('boss-banner').style.display = 'none';
+    document.getElementById('btn-next').disabled = false;
+
+    // Scarce wave clear bonus (scales weakly with wave number)
+    const diff = DIFFICULTIES[state.difficulty];
+    const clearBonus = Math.round(diff.waveBonusBase + state.wave * 0.6);
+    state.gold += clearBonus;
+    updateHUD();
+
+    if (state.wave >= state.maxWaves) {
+      alert("VICTORY! You conquered all 50 Waves and defeated all 5 Mega-Bosses!");
+      location.reload();
+    }
+  }
+}
+
+function updateFX(dt) {
+  for (let i = activeBeams.length - 1; i >= 0; i--) {
+    const fx = activeBeams[i];
+    fx.life -= dt;
+    if (fx.expandTo) {
+      const s = fx.mesh.scale.x + (fx.expandTo / 0.28) * dt;
+      fx.mesh.scale.set(s, s, 1);
+      fx.mesh.material.opacity = Math.max(0, fx.life / 0.28);
+    }
+    if (fx.life <= 0) {
+      fxGroup.remove(fx.mesh);
+      activeBeams.splice(i, 1);
+    }
+  }
+}
+
+// ==========================================
+// 9. UI & MAIN LOOP
+// ==========================================
+function updateHUD() {
+  document.getElementById('ui-gold').textContent = state.gold;
+  document.getElementById('ui-lives').textContent = Math.max(0, state.lives);
+  document.getElementById('ui-wave').textContent = `${state.wave} / ${state.maxWaves}`;
+  document.getElementById('ui-map').textContent = MAPS[state.mapIndex].name;
+  document.getElementById('ui-diff').textContent = state.difficulty;
+
+  if (state.selectedTower) {
+    const def = TOWER_DEFS[state.selectedTower.type];
+    const upgCost = Math.round(def.upgradeCostBase * Math.pow(def.upgradeCostMult, state.selectedTower.level - 1));
+    document.getElementById('btn-upgrade').disabled = state.gold < upgCost || state.selectedTower.level >= 8;
+  }
+}
+
+document.querySelectorAll('.tower-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.tower-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    state.selectedBuildType = card.dataset.type;
+    deselectTower();
+  });
+});
+
+document.getElementById('btn-speed').addEventListener('click', (e) => {
+  state.speed = state.speed === 1 ? 2 : state.speed === 2 ? 3 : 1;
+  e.target.textContent = `Speed: ${state.speed}x`;
+});
+
+document.getElementById('btn-next').addEventListener('click', startNextWave);
+
+// Overlay Setup Choices
+document.querySelectorAll('#map-choices .choice-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#map-choices .choice-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.mapIndex = Number(btn.dataset.map);
+  });
+});
+
+document.querySelectorAll('#diff-choices .choice-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#diff-choices .choice-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.difficulty = btn.dataset.diff;
+  });
+});
+
+document.getElementById('start-btn').addEventListener('click', () => {
+  const diff = DIFFICULTIES[state.difficulty];
+  state.gold = diff.startGold;
+  state.gameStarted = true;
+  document.getElementById('overlay').style.display = 'none';
+  buildMap(state.mapIndex);
+  updateHUD();
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const rawDt = Math.min(clock.getDelta(), 0.05);
+  const dt = rawDt * state.speed;
+
+  if (state.gameStarted) {
+    if (state.waveActive && state.spawnQueue.length > 0) {
+      state.spawnTimer -= dt;
+      if (state.spawnTimer <= 0) {
+        spawnEnemy(state.spawnQueue.shift());
+        state.spawnTimer = 0.65;
+      }
+    }
+    updateTowers(dt);
+    updateProjectiles(dt);
+    updateEnemies(dt);
+    updateFX(dt);
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+buildMap(0);
+animate();
+</script>
+</body>
+</html>
